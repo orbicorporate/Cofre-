@@ -4,11 +4,25 @@ import {
   Search, SlidersHorizontal, Gift, Sparkles, TrendingUp, Wallet, Shuffle, Target,
   Check, Star, Trophy, PiggyBank, Home as HomeIcon, Flag, User, LineChart,
   Info, Landmark, Banknote, Building2, PocketKnife, CircleDot, ArrowRight,
-  ShoppingBag, Scissors, Briefcase, Search as SearchIcon, MapPin, Sun, Moon, Cloud, X,
+  ShoppingBag, Scissors, Briefcase, Search as SearchIcon, MapPin, Sun, Moon, Cloud, X, Mail, Eye, EyeOff, LogOut,
 } from "lucide-react";
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell,
 } from "recharts";
+import { createClient } from "@supabase/supabase-js";
+
+/* =========================================================================
+   SUPABASE — shared orbicorporate backend (profiles / user_data /
+   subscriptions already exist with RLS locked to auth.uid()). This app's
+   state lives inside user_data.data->'cofre' so it can't collide with any
+   other app using the same project. The publishable key is safe to ship in
+   client code — it only grants what RLS allows, i.e. a signed-in user's own
+   rows.
+   ========================================================================= */
+const supabase = createClient(
+  "https://spdqghchvimjytycdmjk.supabase.co",
+  "sb_publishable_N6lr1sn04a1hOWWooaI3tQ_QCFzEk_u"
+);
 
 /* =========================================================================
    REAL CLIENT ARTWORK (provided by the client, transparent PNGs converted to
@@ -1011,6 +1025,37 @@ function useMultiVaultState(activeVaultId, allVaults) {
     return { protectedTotal: total, progressPct: Math.min(100, (total / descriptor.total) * 100) };
   };
 
+  // Real progress only — protectedSet/partialMap/mimoWithdrawn. favoriteSet
+  // and missionTarget are deterministic decorations regenerated from the
+  // vault's own numbers (seeded()), so there's nothing worth persisting there.
+  const serializeStore = () => {
+    const out = {};
+    for (const [vid, d] of Object.entries(store)) {
+      out[vid] = {
+        protectedNumbers: Array.from(d.protectedSet),
+        partial: Array.from(d.partialMap.entries()),
+        mimoWithdrawn: d.mimoWithdrawn || 0,
+      };
+    }
+    return out;
+  };
+
+  const hydrateStore = (serialized) => {
+    if (!serialized) return;
+    const next = {};
+    for (const [vid, d] of Object.entries(serialized)) {
+      const descriptor = allVaults.find((v) => v.id === vid);
+      if (!descriptor) continue; // vault definition no longer exists — skip safely
+      next[vid] = {
+        ...buildVaultData(descriptor),
+        protectedSet: new Set(d.protectedNumbers || []),
+        partialMap: new Map(d.partial || []),
+        mimoWithdrawn: d.mimoWithdrawn || 0,
+      };
+    }
+    setStore(next);
+  };
+
   return {
     challenge,
     protectedSet: data.protectedSet,
@@ -1024,6 +1069,8 @@ function useMultiVaultState(activeVaultId, allVaults) {
     resetVault,
     nextRecommended,
     getVaultProgress,
+    serializeStore,
+    hydrateStore,
   };
 }
 
@@ -3095,6 +3142,10 @@ function ProfileScreen({ go, level, vault, streak, onResetProgress, themeName, o
             <span style={fs_(13, { color: C.danger })}>Resetar progresso</span>
             <ChevronRight size={15} color={C.danger} />
           </button>
+          <button onClick={() => supabase.auth.signOut()} className="p-3.5 flex items-center justify-between text-left active:scale-95 transition-transform" style={{ ...glass, borderRadius: 14 }}>
+            <span className="flex items-center gap-2" style={fs_(13, { color: C.text1 })}><LogOut size={15} color={C.text3} /> Sair da conta</span>
+            <ChevronRight size={15} color={C.text3} />
+          </button>
         </div>
       </div>
       <BottomNav screen="profile" go={go} />
@@ -3489,10 +3540,212 @@ function OnboardingTour({ vault, onClose, onFinish }) {
 }
 
 /* =========================================================================
+   GOOGLE "G" MARK — lucide-react has no brand icons, so this is a small
+   inline SVG of Google's official four-color mark, used only on the
+   "Continuar com Google" button.
+   ========================================================================= */
+function GoogleMark({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48">
+      <path fill="#FFC107" d="M43.6 20.5H42V20.4H24v7.2h11.3C33.6 32.1 29.2 35 24 35c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l5.1-5.1C33.9 6 29.2 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5Z" />
+      <path fill="#FF3D00" d="M6.3 14.7l5.9 4.3C13.9 15.5 18.6 12.5 24 12.5c3.1 0 5.8 1.1 8 3l5.1-5.1C33.9 6 29.2 4 24 4c-7.6 0-14.2 4.3-17.7 10.7Z" />
+      <path fill="#4CAF50" d="M24 44c5.1 0 9.8-2 13.3-5.2l-6.1-5.2C29.2 35.3 26.7 36 24 36c-5.2 0-9.6-3.3-11.2-8l-6.2 4.8C10 39.6 16.5 44 24 44Z" />
+      <path fill="#1976D2" d="M43.6 20.5H42V20.4H24v7.2h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.1 5.2C40.3 36 44 30.6 44 24c0-1.3-.1-2.7-.4-3.5Z" />
+    </svg>
+  );
+}
+
+/* =========================================================================
+   AUTH SCREEN — email/password + Google OAuth via Supabase Auth. Toggles
+   between login and sign-up; errors from Supabase are surfaced in Portuguese
+   where reasonably mappable, raw otherwise.
+   ========================================================================= */
+function AuthScreen({ themeName, onToggleTheme }) {
+  const [mode, setMode] = useState("login"); // "login" | "signup"
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+
+  const friendlyError = (msg) => {
+    if (/invalid login credentials/i.test(msg)) return "E-mail ou senha incorretos.";
+    if (/user already registered/i.test(msg)) return "Já existe uma conta com esse e-mail. Tenta entrar.";
+    if (/password should be at least/i.test(msg)) return "A senha precisa ter pelo menos 6 caracteres.";
+    if (/unable to validate email/i.test(msg) || /invalid email/i.test(msg)) return "Digite um e-mail válido.";
+    return msg;
+  };
+
+  const handleSubmit = async () => {
+    setError("");
+    setInfo("");
+    if (!email.trim() || !password) {
+      setError("Preenche e-mail e senha.");
+      return;
+    }
+    setLoading(true);
+    const fn = mode === "login" ? supabase.auth.signInWithPassword : supabase.auth.signUp;
+    const { error: authError } = await fn.call(supabase.auth, { email: email.trim(), password });
+    setLoading(false);
+    if (authError) {
+      setError(friendlyError(authError.message));
+      return;
+    }
+    if (mode === "signup") setInfo("Conta criada! Entrando...");
+  };
+
+  const handleGoogle = async () => {
+    setError("");
+    setLoading(true);
+    const { error: authError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin },
+    });
+    setLoading(false);
+    if (authError) setError(friendlyError(authError.message));
+  };
+
+  return (
+    <Screen>
+      <div className="flex-1 flex flex-col px-7 pb-10 relative overflow-hidden" style={{ paddingTop: "calc(env(safe-area-inset-top,0px) + 56px)" }}>
+        <div className="absolute inset-0 aurora-drift pointer-events-none" />
+        <button
+          onClick={onToggleTheme}
+          className="absolute z-10 flex items-center gap-1.5 pl-2.5 pr-3 py-2 rounded-full active:scale-95 transition-transform"
+          style={{ top: "calc(env(safe-area-inset-top,0px) + 10px)", right: 20, ...glass }}
+        >
+          {themeName === "black" ? <Moon size={13} color={C.gold} /> : themeName === "soft" ? <Cloud size={13} color={C.gold} /> : <Sun size={13} color={C.blueElectric} />}
+        </button>
+
+        <div className="flex flex-col items-center justify-center relative shrink-0" style={{ paddingTop: 8, paddingBottom: 24 }}>
+          <VaultHero size={150} tier={1} img={VAULT_IMG} ring={false} />
+          <h1 className="mt-1 font-bold text-center leading-tight" style={fs_(24, { color: C.text1 })}>
+            {mode === "login" ? "Bem-vindo de volta" : "Crie sua conta"}
+          </h1>
+          <p className="mt-1.5 text-center" style={fs_(12.5, { color: C.text3 })}>
+            {mode === "login" ? "Entre para continuar guardando" : "Leva menos de um minuto"}
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2.5 p-3.5" style={{ background: C.surface1, borderRadius: 16, border: `1.5px solid ${C.strokeSoft}` }}>
+            <Mail size={16} color={C.text3} className="shrink-0" />
+            <input
+              type="email" autoCapitalize="none" autoCorrect="off" inputMode="email"
+              value={email} onChange={(e) => setEmail(e.target.value)}
+              placeholder="seu@email.com"
+              className="flex-1 bg-transparent outline-none"
+              style={fs_(14, { color: C.text1 })}
+            />
+          </div>
+          <div className="flex items-center gap-2.5 p-3.5" style={{ background: C.surface1, borderRadius: 16, border: `1.5px solid ${C.strokeSoft}` }}>
+            <Lock size={16} color={C.text3} className="shrink-0" />
+            <input
+              type={showPassword ? "text" : "password"}
+              value={password} onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              placeholder="Senha"
+              className="flex-1 bg-transparent outline-none"
+              style={fs_(14, { color: C.text1 })}
+            />
+            <button onClick={() => setShowPassword((s) => !s)} className="shrink-0">
+              {showPassword ? <EyeOff size={16} color={C.text3} /> : <Eye size={16} color={C.text3} />}
+            </button>
+          </div>
+
+          {error && <p style={fs_(12.5, { color: C.danger })}>{error}</p>}
+          {info && <p style={fs_(12.5, { color: C.green })}>{info}</p>}
+
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="w-full py-4 rounded-2xl font-semibold flex items-center justify-center gap-2 disabled:opacity-60 active:scale-95 transition-transform cofre-glow-pulse relative overflow-hidden cofre-shine-sweep"
+            style={fs_(15, { ...ctaGradient, color: "#fff", "--glow-color": `${C.gold}66` })}
+          >
+            {loading ? "Aguarda..." : mode === "login" ? "Entrar" : "Criar conta"}
+          </button>
+
+          <div className="flex items-center gap-3 my-1">
+            <div className="flex-1 h-px" style={{ background: C.strokeSoft }} />
+            <span style={fs_(11.5, { color: C.text3 })}>ou</span>
+            <div className="flex-1 h-px" style={{ background: C.strokeSoft }} />
+          </div>
+
+          <button
+            onClick={handleGoogle}
+            disabled={loading}
+            className="w-full py-3.5 rounded-2xl font-semibold flex items-center justify-center gap-2.5 disabled:opacity-60 active:scale-95 transition-transform"
+            style={{ ...glass }}
+          >
+            <GoogleMark size={17} />
+            <span style={fs_(14, { color: C.text1 })}>Continuar com Google</span>
+          </button>
+        </div>
+
+        <button
+          onClick={() => { setMode((m) => (m === "login" ? "signup" : "login")); setError(""); setInfo(""); }}
+          className="w-full text-center mt-6"
+          style={fs_(13, { color: C.text2 })}
+        >
+          {mode === "login" ? (
+            <>Não tem conta? <span style={{ color: C.blueElectric, fontWeight: 600 }}>Criar agora</span></>
+          ) : (
+            <>Já tem conta? <span style={{ color: C.blueElectric, fontWeight: 600 }}>Entrar</span></>
+          )}
+        </button>
+      </div>
+    </Screen>
+  );
+}
+
+/* =========================================================================
    ROOT APP — fills the whole viewport using 100dvh (not a % height chain,
    so it can't collapse if an ancestor forgets to set a height)
    ========================================================================= */
 export default function App() {
+  const [authState, setAuthState] = useState({ status: "loading", session: null });
+  const hasLoadedRef = useRef(false);
+  const saveTimerRef = useRef(null);
+  const [pendingVaultStore, setPendingVaultStore] = useState(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setAuthState({ status: data.session ? "signedIn" : "signedOut", session: data.session });
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthState({ status: session ? "signedIn" : "signedOut", session });
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  const resetLocalStateToDefaults = useCallback(() => {
+    setScreen("welcome");
+    setAvatarUrl(null);
+    setThemeName("clean");
+    setActiveVaultId("125k");
+    setOwnedVaultIds(["125k"]);
+    setCustomVaults([]);
+    setVaultLabelOverrides({});
+    setStreak(0);
+    setLevel(1);
+    setProtectedToday(0);
+    setVisitedMatch(false);
+    writeLocal(LS_ONBOARDED_KEY, null);
+    writeLocal(LS_AVATAR_KEY, null);
+  }, []);
+
+  const prevUserIdRef = useRef(null);
+  useEffect(() => {
+    const uid = authState.session?.user?.id ?? null;
+    if (authState.status === "signedOut" && prevUserIdRef.current) {
+      // A real sign-out (not just the initial load) — clear so the next
+      // account that logs in on this device never sees leftover state.
+      resetLocalStateToDefaults();
+    }
+    prevUserIdRef.current = uid;
+  }, [authState.status, authState.session?.user?.id, resetLocalStateToDefaults]);
+
   const [screen, setScreen] = useState(() => (readLocal(LS_ONBOARDED_KEY) === "1" ? "home" : "welcome"));
   const [avatarUrl, setAvatarUrl] = useState(() => readLocal(LS_AVATAR_KEY));
   const [themeName, setThemeName] = useState("clean");
@@ -3520,6 +3773,74 @@ export default function App() {
     [customVaults, vaultLabelOverrides]
   );
   const vault = useMultiVaultState(activeVaultId, allVaults);
+
+  // Pull this account's saved state down from Supabase the moment a session
+  // appears (fresh login or a page reload with an existing session).
+  useEffect(() => {
+    if (authState.status !== "signedIn" || !authState.session) {
+      hasLoadedRef.current = false;
+      return;
+    }
+    hasLoadedRef.current = false;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("user_data")
+        .select("data")
+        .eq("user_id", authState.session.user.id)
+        .single();
+      if (cancelled) return;
+      const c = !error ? data?.data?.cofre : null;
+      if (c) {
+        if (c.ownedVaultIds?.length) setOwnedVaultIds(c.ownedVaultIds);
+        if (c.activeVaultId) setActiveVaultId(c.activeVaultId);
+        if (c.customVaults) setCustomVaults(c.customVaults);
+        if (c.vaultLabelOverrides) setVaultLabelOverrides(c.vaultLabelOverrides);
+        if (c.themeName) setThemeName(c.themeName);
+        if (c.avatarUrl) setAvatarUrl(c.avatarUrl);
+        if (typeof c.streak === "number") setStreak(c.streak);
+        if (typeof c.level === "number") setLevel(c.level);
+        if (c.vaultStore) setPendingVaultStore(c.vaultStore);
+        writeLocal(LS_ONBOARDED_KEY, "1");
+        setScreen((s) => (s === "welcome" ? "home" : s));
+      }
+      hasLoadedRef.current = true;
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authState.status, authState.session?.user?.id]);
+
+  // Board progress (protectedSet/partialMap) can only be restored once
+  // `allVaults` already includes any restored custom vaults — otherwise
+  // hydrateStore has nothing to match a custom vault's id against. Waiting
+  // on `customVaults` here guarantees that ordering.
+  useEffect(() => {
+    if (!pendingVaultStore) return;
+    vault.hydrateStore(pendingVaultStore);
+    setPendingVaultStore(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingVaultStore, customVaults]);
+
+  // Push this account's state back up to Supabase, debounced, any time
+  // something worth remembering changes. Gated on hasLoadedRef so we never
+  // overwrite a just-loaded account with the app's default local state.
+  useEffect(() => {
+    if (authState.status !== "signedIn" || !authState.session || !hasLoadedRef.current) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      const payload = {
+        ownedVaultIds, activeVaultId, customVaults, vaultLabelOverrides,
+        themeName, avatarUrl, streak, level,
+        vaultStore: vault.serializeStore(),
+      };
+      supabase
+        .from("user_data")
+        .upsert({ user_id: authState.session.user.id, data: { cofre: payload } }, { onConflict: "user_id" })
+        .then(({ error }) => { if (error) console.error("COFRE save failed:", error.message); });
+    }, 1000);
+    return () => clearTimeout(saveTimerRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authState.status, ownedVaultIds, activeVaultId, customVaults, vaultLabelOverrides, themeName, avatarUrl, streak, level, vault.protectedTotal]);
 
   const go = useCallback((next, payload) => {
     if (next === "stub") setStubLabel(payload?.label || "");
@@ -3721,6 +4042,16 @@ export default function App() {
       `}</style>
 
       <div className="relative w-full h-full overflow-hidden mx-auto" style={{ background: bgGradient, maxWidth: 480 }}>
+        {authState.status === "loading" && (
+          <Screen>
+            <div className="flex-1 flex flex-col items-center justify-center">
+              <VaultHero size={160} tier={1} img={VAULT_IMG} ring={false} />
+            </div>
+          </Screen>
+        )}
+        {authState.status === "signedOut" && <AuthScreen themeName={themeName} onToggleTheme={toggleTheme} />}
+        {authState.status === "signedIn" && (
+          <>
         {screen === "welcome" && <WelcomeScreen onStart={() => go("carousel")} themeName={themeName} onToggleTheme={toggleTheme} />}
         {screen === "carousel" && (
           <ChallengeCarousel
@@ -3764,6 +4095,8 @@ export default function App() {
             onClose={() => setTourOpen(false)}
             onFinish={() => { setLightBurstId((k) => k + 1); setTourOpen(false); }}
           />
+        )}
+          </>
         )}
       </div>
     </div>
