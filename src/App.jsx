@@ -3618,8 +3618,8 @@ function AuthScreen({ themeName, onToggleTheme }) {
           {themeName === "black" ? <Moon size={13} color={C.gold} /> : themeName === "soft" ? <Cloud size={13} color={C.gold} /> : <Sun size={13} color={C.blueElectric} />}
         </button>
 
-        <div className="flex flex-col items-center justify-center relative shrink-0" style={{ paddingTop: 8, paddingBottom: 24 }}>
-          <VaultHero size={150} tier={1} img={VAULT_IMG} ring={false} />
+        <div className="flex flex-col items-center justify-center relative shrink-0" style={{ paddingTop: 4, paddingBottom: 16 }}>
+          <VaultHero size={215} tier={1} img={VAULT_IMG} ring={false} />
           <h1 className="mt-1 font-bold text-center leading-tight" style={fs_(24, { color: C.text1 })}>
             {mode === "login" ? "Bem-vindo de volta" : "Crie sua conta"}
           </h1>
