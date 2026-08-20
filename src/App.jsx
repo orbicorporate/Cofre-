@@ -3385,7 +3385,7 @@ function OnboardingTour({ vault, onClose, onFinish }) {
     {
       icon: Flame,
       color: C.amber,
-      title: `Seu Cofre tem ${fmtInt(n)} números`,
+      title: `Seu Cofre escolhido tem ${fmtInt(n)} números`,
       body: (
         <>
           <p style={fs_(14.5, { color: C.text2, lineHeight: 1.75 })}>
