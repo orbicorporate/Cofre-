@@ -866,42 +866,80 @@ function CreateVaultScreen({ go, onCreate }) {
    SCREEN: MEUS COFRES — every vault the person has (built-in + custom),
    each with its own live progress, plus the entry point to create a new one.
    ========================================================================= */
-function MyVaultsScreen({ go, allVaults, ownedVaultIds, activeVaultId, onSelect, vault }) {
+function MyVaultsScreen({ go, allVaults, ownedVaultIds, activeVaultId, onSelect, vault, onRenameVault, onDeleteVault }) {
   const [newVaultWarning, setNewVaultWarning] = useState(false);
+  const [optionsForId, setOptionsForId] = useState(null);
+  const [renameId, setRenameId] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [migrateForId, setMigrateForId] = useState(null);
+  const [migrateTargetId, setMigrateTargetId] = useState(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+
+  const owned = allVaults.filter((v) => ownedVaultIds.includes(v.id));
+  const optionsVault = owned.find((v) => v.id === optionsForId);
+  const migrateFromVault = owned.find((v) => v.id === migrateForId);
+  const migrateOptions = owned.filter((v) => v.id !== migrateForId);
+  const canDelete = owned.length > 1;
+
+  const closeAllSheets = () => {
+    setOptionsForId(null);
+    setRenameId(null);
+    setMigrateForId(null);
+    setMigrateTargetId(null);
+    setDeleteConfirmId(null);
+  };
+
+  const confirmDelete = (id) => {
+    const fallback = owned.find((v) => v.id !== id)?.id;
+    onDeleteVault(id, fallback);
+    closeAllSheets();
+  };
+
+  const confirmMigrate = () => {
+    if (!migrateForId || !migrateTargetId) return;
+    vault.migrateProgress(migrateForId, migrateTargetId);
+    onDeleteVault(migrateForId, migrateTargetId);
+    closeAllSheets();
+  };
+
   return (
     <Screen>
       <BackHeader title="Meus Cofres" subtitle="Todos os seus objetivos, um cofre para cada" onBack={() => go("home")} />
       <div className="flex-1 overflow-y-auto no-scrollbar px-5 pb-6 min-h-0">
         <div className="flex flex-col gap-2.5">
-          {allVaults.filter((v) => ownedVaultIds.includes(v.id)).map((v) => {
+          {owned.map((v) => {
             const isActive = v.id === activeVaultId;
             const prog = isActive ? { protectedTotal: vault.protectedTotal, progressPct: vault.progressPct } : vault.getVaultProgress(v.id);
             const t = tierOf(v);
             const color = TIER_COLORS[t];
             return (
-              <button
-                key={v.id}
-                onClick={() => { onSelect(v.id); go("home"); }}
-                className="p-4 text-left active:scale-95 transition-transform"
-                style={isActive ? glassActive : glass}
-              >
+              <div key={v.id} className="p-4" style={isActive ? glassActive : glass}>
                 <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ background: `${color}1f` }}>
-                    <Lock size={17} color={color} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <p className="font-semibold truncate" style={fs_(13.5, { color: C.text1 })}>{v.label}</p>
-                      {isActive && <span className="px-1.5 py-0.5 rounded-full shrink-0" style={fs_(9, { color: C.green, background: "rgba(5,130,102,0.12)" })}>Ativo</span>}
+                  <button onClick={() => { onSelect(v.id); go("home"); }} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                    <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ background: `${color}1f` }}>
+                      <Lock size={17} color={color} />
                     </div>
-                    <p className="truncate" style={fs_(11, { color: C.text3 })}>{v.sub} · meta {fmtBRL(v.total)}</p>
-                  </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-semibold truncate" style={fs_(13.5, { color: C.text1 })}>{v.label}</p>
+                        {isActive && <span className="px-1.5 py-0.5 rounded-full shrink-0" style={fs_(9, { color: C.green, background: "rgba(5,130,102,0.12)" })}>Ativo</span>}
+                      </div>
+                      <p className="truncate" style={fs_(11, { color: C.text3 })}>{v.sub} · meta {fmtBRL(v.total)}</p>
+                    </div>
+                  </button>
                   <p className="font-semibold shrink-0" style={fs_(12.5, { color: color })}>{prog.progressPct.toFixed(0)}%</p>
+                  <button onClick={() => setOptionsForId(v.id)} className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={glass}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={C.text2} strokeWidth="2.2" strokeLinecap="round">
+                      <circle cx="12" cy="5" r="1.2" fill={C.text2} stroke="none" />
+                      <circle cx="12" cy="12" r="1.2" fill={C.text2} stroke="none" />
+                      <circle cx="12" cy="19" r="1.2" fill={C.text2} stroke="none" />
+                    </svg>
+                  </button>
                 </div>
                 <div className="h-1.5 rounded-full mt-3" style={{ background: "rgba(20,41,63,0.07)" }}>
                   <div className="h-full rounded-full transition-all duration-500" style={{ width: `${prog.progressPct}%`, background: color }} />
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -911,6 +949,142 @@ function MyVaultsScreen({ go, allVaults, ownedVaultIds, activeVaultId, onSelect,
         </button>
       </div>
       <BottomNav screen="home" go={go} />
+
+      {/* Options sheet: rename / migrate / delete */}
+      {optionsForId && !renameId && !migrateForId && !deleteConfirmId && optionsVault && (
+        <Sheet onClose={closeAllSheets}>
+          <h3 className="font-bold text-center px-4" style={fs_(16, { color: C.text1 })}>{optionsVault.label}</h3>
+          <div className="flex flex-col gap-2 mt-5">
+            <button
+              onClick={() => { setRenameId(optionsVault.id); setRenameValue(optionsVault.label); }}
+              className="p-3.5 flex items-center gap-3 text-left active:scale-95 transition-transform"
+              style={{ ...glass, borderRadius: 14 }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.text2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+              </svg>
+              <span style={fs_(13.5, { color: C.text1 })}>Renomear</span>
+            </button>
+            {owned.length > 1 && (
+              <button
+                onClick={() => { setMigrateForId(optionsVault.id); setMigrateTargetId(null); }}
+                className="p-3.5 flex items-center gap-3 text-left active:scale-95 transition-transform"
+                style={{ ...glass, borderRadius: 14 }}
+              >
+                <Shuffle size={16} color={C.text2} />
+                <span style={fs_(13.5, { color: C.text1 })}>Migrar progresso para outro cofre</span>
+              </button>
+            )}
+            <button
+              onClick={() => (canDelete ? setDeleteConfirmId(optionsVault.id) : null)}
+              disabled={!canDelete}
+              className="p-3.5 flex items-center gap-3 text-left active:scale-95 transition-transform disabled:opacity-40"
+              style={{ background: "rgba(225,84,75,0.06)", border: `1px solid ${C.danger}33`, borderRadius: 14 }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.danger} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6" />
+              </svg>
+              <span style={fs_(13.5, { color: C.danger })}>Excluir Cofre</span>
+            </button>
+            {!canDelete && (
+              <p className="text-center mt-1" style={fs_(11, { color: C.text3 })}>Não dá pra excluir seu único Cofre.</p>
+            )}
+          </div>
+        </Sheet>
+      )}
+
+      {/* Rename sheet */}
+      {renameId && (
+        <Sheet onClose={closeAllSheets}>
+          <h3 className="font-bold text-center" style={fs_(16, { color: C.text1 })}>Renomear Cofre</h3>
+          <div className="flex items-center gap-2.5 mt-5 p-3.5" style={{ background: C.surface1, borderRadius: 16, border: `1.5px solid ${C.strokeSoft}` }}>
+            <input
+              autoFocus
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && renameValue.trim() && (onRenameVault(renameId, renameValue.trim()), closeAllSheets())}
+              className="flex-1 bg-transparent outline-none font-semibold"
+              style={fs_(14, { color: C.text1 })}
+            />
+          </div>
+          <button
+            onClick={() => { if (renameValue.trim()) { onRenameVault(renameId, renameValue.trim()); closeAllSheets(); } }}
+            className="w-full py-3.5 rounded-2xl font-semibold mt-4 active:scale-95 transition-transform"
+            style={fs_(14, { ...ctaGradient, color: "#fff" })}
+          >
+            Salvar
+          </button>
+        </Sheet>
+      )}
+
+      {/* Migrate sheet */}
+      {migrateForId && migrateFromVault && (
+        <Sheet onClose={closeAllSheets}>
+          <h3 className="font-bold text-center px-4" style={fs_(16, { color: C.text1, lineHeight: 1.4 })}>
+            Migrar progresso de {migrateFromVault.label}
+          </h3>
+          <p className="text-center mt-1.5 px-2" style={fs_(12.5, { color: C.text3 })}>
+            O valor guardado nesse cofre é movido pro cofre de destino, e {migrateFromVault.label} é excluído.
+          </p>
+          <div className="flex flex-col gap-2 mt-5">
+            {migrateOptions.map((v) => {
+              const isSelected = migrateTargetId === v.id;
+              return (
+                <button
+                  key={v.id}
+                  onClick={() => setMigrateTargetId(v.id)}
+                  className="p-3.5 flex items-center justify-between text-left active:scale-95 transition-transform"
+                  style={isSelected ? { ...glassActive, borderRadius: 14 } : { ...glass, borderRadius: 14 }}
+                >
+                  <span style={fs_(13.5, { color: C.text1 })}>{v.label}</span>
+                  {isSelected && <Check size={16} color={C.blueElectric} />}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            onClick={confirmMigrate}
+            disabled={!migrateTargetId}
+            className="w-full py-3.5 rounded-2xl font-semibold mt-5 disabled:opacity-40 active:scale-95 transition-transform"
+            style={fs_(14, { ...ctaGradient, color: "#fff" })}
+          >
+            Migrar e excluir {migrateFromVault.label}
+          </button>
+        </Sheet>
+      )}
+
+      {/* Delete confirmation */}
+      {deleteConfirmId && (
+        <Sheet onClose={closeAllSheets}>
+          <div className="flex flex-col items-center text-center pt-1">
+            <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4" style={{ background: `${C.danger}1a`, border: `1px solid ${C.danger}55` }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.danger} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6" />
+              </svg>
+            </div>
+            <h3 className="font-bold px-2" style={fs_(18, { color: C.text1, lineHeight: 1.35 })}>Excluir este Cofre?</h3>
+            <p className="mt-2 px-2" style={fs_(13.5, { color: C.text2, lineHeight: 1.55 })}>
+              Todo o progresso guardado nele some para sempre. Se quiser preservar o valor, migre pra outro cofre em vez de excluir. Essa ação não pode ser desfeita.
+            </p>
+            <div className="w-full flex flex-col gap-2.5 mt-6">
+              <button
+                onClick={() => confirmDelete(deleteConfirmId)}
+                className="w-full py-3.5 rounded-2xl font-semibold active:scale-95 transition-transform"
+                style={fs_(14, { background: C.danger, color: "#fff" })}
+              >
+                Sim, excluir para sempre
+              </button>
+              <button
+                onClick={closeAllSheets}
+                className="w-full py-3.5 rounded-2xl font-semibold active:scale-95 transition-transform"
+                style={fs_(14, { background: "rgba(20,41,63,0.06)", color: C.text2, border: `1px solid ${C.strokeSoft}` })}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </Sheet>
+      )}
 
       {newVaultWarning && (
         <Sheet onClose={() => setNewVaultWarning(false)}>
@@ -1056,6 +1230,55 @@ function useMultiVaultState(activeVaultId, allVaults) {
     setStore(next);
   };
 
+  // Wipes a single vault's progress out of the store entirely — used when
+  // the person deletes a vault. Doesn't touch ownership (ownedVaultIds
+  // etc.) — that's App-level state, handled by the caller.
+  const deleteVaultData = (vaultId) => {
+    setStore((prev) => {
+      if (!(vaultId in prev)) return prev;
+      const next = { ...prev };
+      delete next[vaultId];
+      return next;
+    });
+  };
+
+  // Moves the full protected total of `fromId` into `toId`: takes the
+  // source's real guarded amount and applies it to the destination by
+  // marking the largest available numbers first (same greedy idea as
+  // Cofre Match) up to that amount, then zeroes the source out. Returns
+  // how much actually got applied (can be slightly less than the source
+  // total if the destination doesn't have enough room left to absorb it).
+  const migrateProgress = (fromId, toId) => {
+    const fromDescriptor = allVaults.find((v) => v.id === fromId);
+    const toDescriptor = allVaults.find((v) => v.id === toId);
+    if (!fromDescriptor || !toDescriptor || fromId === toId) return 0;
+
+    let migratedAmount = 0;
+    setStore((prev) => {
+      const fromData = prev[fromId] || buildVaultData(fromDescriptor);
+      const toData = prev[toId] || buildVaultData(toDescriptor);
+      const amount = vaultDataTotal(fromData);
+
+      const newProtected = new Set(toData.protectedSet);
+      let remaining = amount;
+      for (let n = toDescriptor.n; n >= 1 && remaining > 0; n--) {
+        if (newProtected.has(n) || toData.partialMap.has(n)) continue;
+        if (n <= remaining) {
+          newProtected.add(n);
+          remaining -= n;
+        }
+      }
+      migratedAmount = amount - remaining;
+
+      return {
+        ...prev,
+        [fromId]: buildVaultData(fromDescriptor),
+        [toId]: { ...toData, protectedSet: newProtected },
+      };
+    });
+    return migratedAmount;
+  };
+
   return {
     challenge,
     protectedSet: data.protectedSet,
@@ -1071,6 +1294,8 @@ function useMultiVaultState(activeVaultId, allVaults) {
     getVaultProgress,
     serializeStore,
     hydrateStore,
+    deleteVaultData,
+    migrateProgress,
   };
 }
 
@@ -3870,6 +4095,24 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [go]);
 
+  // Removes ownership of a vault entirely (list membership + custom
+  // definition + label override) and wipes its stored progress. If the
+  // deleted vault was the active one, switches to `fallbackId` (the
+  // migration destination, or whichever other owned vault the caller
+  // picked) so the person never lands on a vault that no longer exists.
+  const handleDeleteVault = useCallback((id, fallbackId) => {
+    setOwnedVaultIds((prev) => prev.filter((x) => x !== id));
+    setCustomVaults((prev) => prev.filter((v) => v.id !== id));
+    setVaultLabelOverrides((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    vault.deleteVaultData(id);
+    setActiveVaultId((prev) => (prev === id ? (fallbackId || "125k") : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vault]);
+
   // Zera tudo — números protegidos, sequência, nível e mimos — como se a
   // pessoa estivesse começando do zero, e leva de volta para o perfil.
   const resetAllProgress = useCallback(() => {
@@ -4073,7 +4316,18 @@ export default function App() {
         {screen === "mystery" && <MysteryBoxScreen vault={vault} go={go} />}
         {screen === "withdraw" && <WithdrawScreen vault={vault} go={go} />}
         {screen === "wallets" && <WalletsScreen go={go} />}
-        {screen === "myVaults" && <MyVaultsScreen go={go} allVaults={allVaults} ownedVaultIds={ownedVaultIds} activeVaultId={activeVaultId} onSelect={setActiveVaultId} vault={vault} />}
+        {screen === "myVaults" && (
+          <MyVaultsScreen
+            go={go}
+            allVaults={allVaults}
+            ownedVaultIds={ownedVaultIds}
+            activeVaultId={activeVaultId}
+            onSelect={setActiveVaultId}
+            vault={vault}
+            onRenameVault={(id, label) => setVaultLabelOverrides((prev) => ({ ...prev, [id]: label }))}
+            onDeleteVault={handleDeleteVault}
+          />
+        )}
         {screen === "createVault" && <CreateVaultScreen go={go} onCreate={handleCreateVault} />}
         {screen === "match" && <MatchScreen vault={vault} go={go} onVisit={() => setVisitedMatch(true)} onProtected={handleProtected} />}
         {screen === "roulette" && <RouletteScreen vault={vault} go={go} onProtected={handleProtected} />}
