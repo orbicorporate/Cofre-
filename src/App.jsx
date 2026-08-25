@@ -874,6 +874,7 @@ function MyVaultsScreen({ go, allVaults, ownedVaultIds, activeVaultId, onSelect,
   const [migrateForId, setMigrateForId] = useState(null);
   const [migrateTargetId, setMigrateTargetId] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [deleteConfirmStep, setDeleteConfirmStep] = useState(1);
 
   const owned = allVaults.filter((v) => ownedVaultIds.includes(v.id));
   const optionsVault = owned.find((v) => v.id === optionsForId);
@@ -887,6 +888,7 @@ function MyVaultsScreen({ go, allVaults, ownedVaultIds, activeVaultId, onSelect,
     setMigrateForId(null);
     setMigrateTargetId(null);
     setDeleteConfirmId(null);
+    setDeleteConfirmStep(1);
   };
 
   const confirmDelete = (id) => {
@@ -1054,7 +1056,7 @@ function MyVaultsScreen({ go, allVaults, ownedVaultIds, activeVaultId, onSelect,
       )}
 
       {/* Delete confirmation */}
-      {deleteConfirmId && (
+      {deleteConfirmId && deleteConfirmStep === 1 && (
         <Sheet onClose={closeAllSheets}>
           <div className="flex flex-col items-center text-center pt-1">
             <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4" style={{ background: `${C.danger}1a`, border: `1px solid ${C.danger}55` }}>
@@ -1068,11 +1070,43 @@ function MyVaultsScreen({ go, allVaults, ownedVaultIds, activeVaultId, onSelect,
             </p>
             <div className="w-full flex flex-col gap-2.5 mt-6">
               <button
+                onClick={() => setDeleteConfirmStep(2)}
+                className="w-full py-3.5 rounded-2xl font-semibold active:scale-95 transition-transform"
+                style={fs_(14, { background: C.danger, color: "#fff" })}
+              >
+                Continuar excluindo
+              </button>
+              <button
+                onClick={closeAllSheets}
+                className="w-full py-3.5 rounded-2xl font-semibold active:scale-95 transition-transform"
+                style={fs_(14, { background: "rgba(20,41,63,0.06)", color: C.text2, border: `1px solid ${C.strokeSoft}` })}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </Sheet>
+      )}
+
+      {deleteConfirmId && deleteConfirmStep === 2 && (
+        <Sheet onClose={closeAllSheets}>
+          <div className="flex flex-col items-center text-center pt-1">
+            <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 cofre-glow-pulse" style={{ background: `${C.danger}1a`, border: `1.5px solid ${C.danger}`, "--glow-color": `${C.danger}55` }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.danger} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6" />
+              </svg>
+            </div>
+            <h3 className="font-bold px-2" style={fs_(18, { color: C.danger, lineHeight: 1.35 })}>Tem certeza mesmo?</h3>
+            <p className="mt-2 px-2" style={fs_(13.5, { color: C.text2, lineHeight: 1.55 })}>
+              Última confirmação: esse Cofre e tudo que está guardado nele vão ser apagados para sempre.
+            </p>
+            <div className="w-full flex flex-col gap-2.5 mt-6">
+              <button
                 onClick={() => confirmDelete(deleteConfirmId)}
                 className="w-full py-3.5 rounded-2xl font-semibold active:scale-95 transition-transform"
                 style={fs_(14, { background: C.danger, color: "#fff" })}
               >
-                Sim, excluir para sempre
+                Sim, excluir definitivamente
               </button>
               <button
                 onClick={closeAllSheets}
@@ -1302,7 +1336,7 @@ function useMultiVaultState(activeVaultId, allVaults) {
 /* =========================================================================
    SCREEN: HOME
    ========================================================================= */
-function HomeScreen({ vault, go, streak, level, themeName, onToggleTheme, onOpenTour, allVaults, ownedVaultIds, activeVaultId, onSelectVault, onRenameVault, avatarUrl }) {
+function HomeScreen({ vault, go, streak, level, themeName, onToggleTheme, onOpenTour, allVaults, ownedVaultIds, activeVaultId, onSelectVault, onRenameVault, onDeleteVault, avatarUrl }) {
   const { challenge, protectedTotal, progressPct, protectedSet } = vault;
   const remaining = Math.max(0, challenge.total - protectedTotal);
   const nextMilestone = MILESTONES.find((m) => m > progressPct) ?? null;
@@ -1315,6 +1349,14 @@ function HomeScreen({ vault, go, streak, level, themeName, onToggleTheme, onOpen
   const [editingVaultId, setEditingVaultId] = useState(null);
   const [editingLabel, setEditingLabel] = useState("");
   const [newVaultWarning, setNewVaultWarning] = useState(false);
+  // Delete/migrate flow state. `step` walks through:
+  //   choose -> migratePick -> migrateConfirm (1 confirm, since picking a
+  //             destination is itself a deliberate step)
+  //   choose -> eraseConfirm1 -> eraseConfirm2 (2 explicit confirms, since
+  //             this path has no undo and no fallback)
+  const [deleteFlow, setDeleteFlow] = useState(null); // { id, step }
+  const [deleteMigrateTarget, setDeleteMigrateTarget] = useState(null);
+  const closeDeleteFlow = () => { setDeleteFlow(null); setDeleteMigrateTarget(null); };
 
   const notifications = [
     { icon: Gift, color: C.gold, title: "Novo mimo disponível", sub: "Você desbloqueou um marco de jornada", time: "há 2h" },
@@ -1505,7 +1547,7 @@ function HomeScreen({ vault, go, streak, level, themeName, onToggleTheme, onOpen
         </Sheet>
       )}
 
-      {vaultSwitcherOpen && (
+      {vaultSwitcherOpen && !deleteFlow && (
         <Sheet onClose={() => { setVaultSwitcherOpen(false); setEditingVaultId(null); }}>
           <h3 className="font-bold text-center" style={fs_(17, { color: C.text1 })}>Trocar de Cofre</h3>
           <p className="text-center mt-1" style={fs_(12.5, { color: C.text3 })}>Escolha qual objetivo você quer guardar agora</p>
@@ -1573,6 +1615,17 @@ function HomeScreen({ vault, go, streak, level, themeName, onToggleTheme, onOpen
                         </svg>
                       </button>
                     )}
+                    {!isEditing && ownedVaultIds.length > 1 && (
+                      <button
+                        onClick={() => setDeleteFlow({ id: v.id, step: "choose" })}
+                        className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+                        style={{ background: "rgba(225,84,75,0.08)" }}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.danger} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6" />
+                        </svg>
+                      </button>
+                    )}
                     {isActive && !isEditing && <Check size={17} color={C.green} className="shrink-0" />}
                   </div>
                 </div>
@@ -1588,6 +1641,172 @@ function HomeScreen({ vault, go, streak, level, themeName, onToggleTheme, onOpen
           </button>
         </Sheet>
       )}
+
+      {deleteFlow && (() => {
+        const dVault = allVaults.find((v) => v.id === deleteFlow.id);
+        if (!dVault) return null;
+        const dProg = deleteFlow.id === activeVaultId ? { protectedTotal } : vault.getVaultProgress(deleteFlow.id);
+        const migrateOptions = allVaults.filter((v) => ownedVaultIds.includes(v.id) && v.id !== deleteFlow.id);
+        const targetVault = migrateOptions.find((v) => v.id === deleteMigrateTarget);
+
+        const runDelete = () => {
+          const fallback = ownedVaultIds.find((id) => id !== deleteFlow.id);
+          onDeleteVault(deleteFlow.id, fallback);
+          setVaultSwitcherOpen(false);
+          closeDeleteFlow();
+        };
+        const runMigrate = () => {
+          vault.migrateProgress(deleteFlow.id, deleteMigrateTarget);
+          onDeleteVault(deleteFlow.id, deleteMigrateTarget);
+          setVaultSwitcherOpen(false);
+          closeDeleteFlow();
+        };
+
+        return (
+          <Sheet onClose={closeDeleteFlow}>
+            {deleteFlow.step === "choose" && (
+              <div className="pt-1">
+                <h3 className="font-bold text-center px-2" style={fs_(17, { color: C.text1, lineHeight: 1.4 })}>
+                  O que fazer com {dVault.label}?
+                </h3>
+                <p className="text-center mt-1.5 px-2" style={fs_(12.5, { color: C.text3 })}>
+                  {fmtBRL(dProg.protectedTotal)} guardados nesse cofre até agora
+                </p>
+                <div className="flex flex-col gap-2.5 mt-5">
+                  <button
+                    onClick={() => setDeleteFlow({ id: deleteFlow.id, step: migrateOptions.length ? "migratePick" : "choose" })}
+                    disabled={!migrateOptions.length}
+                    className="p-4 text-left disabled:opacity-40 active:scale-95 transition-transform"
+                    style={{ ...glassActive, borderRadius: 16 }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Shuffle size={18} color={C.blueElectric} />
+                      <div>
+                        <p className="font-semibold" style={fs_(13.5, { color: C.text1 })}>Migrar o dinheiro para outro cofre</p>
+                        <p style={fs_(11.5, { color: C.text3 })}>Move o valor guardado, o cofre é excluído</p>
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setDeleteFlow({ id: deleteFlow.id, step: "eraseConfirm1" })}
+                    className="p-4 text-left active:scale-95 transition-transform"
+                    style={{ background: "rgba(225,84,75,0.06)", border: `1px solid ${C.danger}33`, borderRadius: 16 }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.danger} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6" />
+                      </svg>
+                      <div>
+                        <p className="font-semibold" style={fs_(13.5, { color: C.danger })}>Excluir sem migrar</p>
+                        <p style={fs_(11.5, { color: C.text3 })}>Como se nada tivesse sido guardado nele</p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {deleteFlow.step === "migratePick" && (
+              <div className="pt-1">
+                <h3 className="font-bold text-center px-2" style={fs_(17, { color: C.text1, lineHeight: 1.4 })}>
+                  Migrar {dVault.label} para qual cofre?
+                </h3>
+                <div className="flex flex-col gap-2 mt-5">
+                  {migrateOptions.map((v) => {
+                    const isSelected = deleteMigrateTarget === v.id;
+                    return (
+                      <button
+                        key={v.id}
+                        onClick={() => setDeleteMigrateTarget(v.id)}
+                        className="p-3.5 flex items-center justify-between text-left active:scale-95 transition-transform"
+                        style={isSelected ? { ...glassActive, borderRadius: 14 } : { ...glass, borderRadius: 14 }}
+                      >
+                        <span style={fs_(13.5, { color: C.text1 })}>{v.label}</span>
+                        {isSelected && <Check size={16} color={C.blueElectric} />}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => deleteMigrateTarget && setDeleteFlow({ id: deleteFlow.id, step: "migrateConfirm" })}
+                  disabled={!deleteMigrateTarget}
+                  className="w-full py-3.5 rounded-2xl font-semibold mt-5 disabled:opacity-40 active:scale-95 transition-transform"
+                  style={fs_(14, { ...ctaGradient, color: "#fff" })}
+                >
+                  Continuar
+                </button>
+                <button onClick={() => setDeleteFlow({ id: deleteFlow.id, step: "choose" })} className="w-full text-center mt-3" style={fs_(12.5, { color: C.text3 })}>
+                  Voltar
+                </button>
+              </div>
+            )}
+
+            {deleteFlow.step === "migrateConfirm" && targetVault && (
+              <div className="flex flex-col items-center text-center pt-1">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4" style={{ background: `${C.blueElectric}1f`, border: `1px solid ${C.blueElectric}55` }}>
+                  <Shuffle size={22} color={C.blueElectric} />
+                </div>
+                <h3 className="font-bold px-2" style={fs_(18, { color: C.text1, lineHeight: 1.35 })}>Confirma a migração?</h3>
+                <p className="mt-2 px-2" style={fs_(13.5, { color: C.text2, lineHeight: 1.55 })}>
+                  <b style={{ color: C.text1 }}>{fmtBRL(dProg.protectedTotal)}</b> vai sair de <b style={{ color: C.text1 }}>{dVault.label}</b> e entrar em <b style={{ color: C.text1 }}>{targetVault.label}</b>. Depois disso, {dVault.label} é excluído. Essa ação não pode ser desfeita.
+                </p>
+                <div className="w-full flex flex-col gap-2.5 mt-6">
+                  <button onClick={runMigrate} className="w-full py-3.5 rounded-2xl font-semibold active:scale-95 transition-transform" style={fs_(14, { ...ctaGradient, color: "#fff" })}>
+                    Sim, migrar agora
+                  </button>
+                  <button onClick={closeDeleteFlow} className="w-full py-3.5 rounded-2xl font-semibold active:scale-95 transition-transform" style={fs_(14, { background: "rgba(20,41,63,0.06)", color: C.text2, border: `1px solid ${C.strokeSoft}` })}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {deleteFlow.step === "eraseConfirm1" && (
+              <div className="flex flex-col items-center text-center pt-1">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4" style={{ background: `${C.danger}1a`, border: `1px solid ${C.danger}55` }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.danger} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6" />
+                  </svg>
+                </div>
+                <h3 className="font-bold px-2" style={fs_(18, { color: C.text1, lineHeight: 1.35 })}>Excluir {dVault.label}?</h3>
+                <p className="mt-2 px-2" style={fs_(13.5, { color: C.text2, lineHeight: 1.55 })}>
+                  Os <b style={{ color: C.text1 }}>{fmtBRL(dProg.protectedTotal)}</b> guardados nesse cofre somem, como se nunca tivessem sido protegidos. Não é possível desfazer.
+                </p>
+                <div className="w-full flex flex-col gap-2.5 mt-6">
+                  <button onClick={() => setDeleteFlow({ id: deleteFlow.id, step: "eraseConfirm2" })} className="w-full py-3.5 rounded-2xl font-semibold active:scale-95 transition-transform" style={fs_(14, { background: C.danger, color: "#fff" })}>
+                    Continuar excluindo
+                  </button>
+                  <button onClick={closeDeleteFlow} className="w-full py-3.5 rounded-2xl font-semibold active:scale-95 transition-transform" style={fs_(14, { background: "rgba(20,41,63,0.06)", color: C.text2, border: `1px solid ${C.strokeSoft}` })}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {deleteFlow.step === "eraseConfirm2" && (
+              <div className="flex flex-col items-center text-center pt-1">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 cofre-glow-pulse" style={{ background: `${C.danger}1a`, border: `1.5px solid ${C.danger}`, "--glow-color": `${C.danger}55` }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.danger} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6" />
+                  </svg>
+                </div>
+                <h3 className="font-bold px-2" style={fs_(18, { color: C.danger, lineHeight: 1.35 })}>Tem certeza mesmo?</h3>
+                <p className="mt-2 px-2" style={fs_(13.5, { color: C.text2, lineHeight: 1.55 })}>
+                  Última confirmação: {dVault.label} e os {fmtBRL(dProg.protectedTotal)} guardados nele vão ser apagados para sempre.
+                </p>
+                <div className="w-full flex flex-col gap-2.5 mt-6">
+                  <button onClick={runDelete} className="w-full py-3.5 rounded-2xl font-semibold active:scale-95 transition-transform" style={fs_(14, { background: C.danger, color: "#fff" })}>
+                    Sim, excluir definitivamente
+                  </button>
+                  <button onClick={closeDeleteFlow} className="w-full py-3.5 rounded-2xl font-semibold active:scale-95 transition-transform" style={fs_(14, { background: "rgba(20,41,63,0.06)", color: C.text2, border: `1px solid ${C.strokeSoft}` })}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+          </Sheet>
+        );
+      })()}
 
       {newVaultWarning && (
         <Sheet onClose={() => setNewVaultWarning(false)}>
@@ -4308,7 +4527,7 @@ export default function App() {
             onCreateNew={() => go("createVault")}
           />
         )}
-        {screen === "home" && <HomeScreen vault={vault} go={go} streak={streak} level={level} themeName={themeName} onToggleTheme={toggleTheme} onOpenTour={() => setTourOpen(true)} allVaults={allVaults} ownedVaultIds={ownedVaultIds} activeVaultId={activeVaultId} onSelectVault={setActiveVaultId} onRenameVault={(id, label) => setVaultLabelOverrides((prev) => ({ ...prev, [id]: label }))} avatarUrl={avatarUrl} />}
+        {screen === "home" && <HomeScreen vault={vault} go={go} streak={streak} level={level} themeName={themeName} onToggleTheme={toggleTheme} onOpenTour={() => setTourOpen(true)} allVaults={allVaults} ownedVaultIds={ownedVaultIds} activeVaultId={activeVaultId} onSelectVault={setActiveVaultId} onRenameVault={(id, label) => setVaultLabelOverrides((prev) => ({ ...prev, [id]: label }))} onDeleteVault={handleDeleteVault} avatarUrl={avatarUrl} />}
         {screen === "board" && <BoardScreen vault={vault} go={go} openNumber={openNumber} />}
         {screen === "journey" && <JourneyScreen vault={vault} go={go} mimoStatus={mimoStatus} setMimoStatus={setMimoStatus} />}
         {screen === "achievements" && <AchievementsScreen go={go} level={level} vault={vault} streak={streak} />}
