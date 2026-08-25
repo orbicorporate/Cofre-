@@ -573,7 +573,7 @@ function WelcomeScreen({ onStart, themeName, onToggleTheme }) {
           <span style={fs_(11.5, { color: C.text1, fontWeight: 600 })}>{themeMeta.label}</span>
         </button>
         <div className="flex-1 flex flex-col items-center justify-center relative min-h-0">
-          <VaultHero size={340} tier={1} img={VAULT_OPEN_IMG} ring={false} />
+          <VaultHero size={375} tier={1} img={VAULT_OPEN_IMG} ring={false} />
           <h1 className="mt-2 font-bold text-center leading-tight" style={fs_(30, { color: C.text1 })}>
             Este é o seu<br /><span style={{ color: C.blueElectric }}>Cofre</span>
           </h1>
@@ -687,7 +687,7 @@ function ChallengeCarousel({ onChoose, onCreateNew }) {
                       Personalizado
                     </span>
                     <div className="my-6 relative">
-                      <VaultHero size={152} tier={2} glow={isActive} img={VAULT_OPEN_IMG} ring={isActive} ringPct={80} ringAnimated ringThickness={0.032} />
+                      <VaultHero size={172} tier={2} glow={isActive} img={VAULT_OPEN_IMG} ring={isActive} ringPct={80} ringAnimated ringThickness={0.032} />
                       <div className="absolute rounded-full flex items-center justify-center" style={{ width: 30, height: 30, right: -2, bottom: 6, background: C.violet, border: "2px solid #fff", boxShadow: "0 4px 10px -2px rgba(73,124,230,0.6)" }}>
                         <span className="font-bold" style={fs_(17, { color: "#fff", lineHeight: 1 })}>+</span>
                       </div>
@@ -1427,7 +1427,7 @@ function HomeScreen({ vault, go, streak, level, themeName, onToggleTheme, onOpen
         </div>
 
         <div className="flex flex-col items-center my-7">
-          <VaultHero size={260} progress={progressPct} tier={tierOf(challenge)} />
+          <VaultHero size={300} progress={progressPct} tier={tierOf(challenge)} />
           <div className="flex items-center gap-8 mt-5">
             <div className="text-center">
               <div className="flex items-center gap-1 justify-center">
@@ -3523,14 +3523,14 @@ function ProfileScreen({ go, level, vault, streak, onResetProgress, themeName, o
       <div className="flex-1 overflow-y-auto no-scrollbar px-5 pb-6 min-h-0">
         <div className="flex flex-col items-center pt-2 pb-2">
           <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoPick} style={{ display: "none" }} />
-          <button onClick={() => fileInputRef.current?.click()} className="relative w-20 h-20 active:scale-95 transition-transform">
+          <button onClick={() => fileInputRef.current?.click()} className="relative w-32 h-32 active:scale-95 transition-transform">
             {avatarUrl ? (
-              <img src={avatarUrl} alt="Sua foto" className="w-20 h-20 rounded-full object-cover" style={{ border: `2px solid ${C.strokeActive}` }} />
+              <img src={avatarUrl} alt="Sua foto" className="w-32 h-32 rounded-full object-cover" style={{ border: `2px solid ${C.strokeActive}` }} />
             ) : (
-              <div className="w-20 h-20 rounded-full" style={{ background: `linear-gradient(135deg, ${C.violet}, ${C.blueElectric})`, border: `2px solid ${C.strokeActive}` }} />
+              <div className="w-32 h-32 rounded-full" style={{ background: `linear-gradient(135deg, ${C.violet}, ${C.blueElectric})`, border: `2px solid ${C.strokeActive}` }} />
             )}
-            <span className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center" style={{ background: C.blueElectric, border: `2px solid ${C.surface1}` }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <span className="absolute -bottom-1 -right-1 w-9 h-9 rounded-full flex items-center justify-center" style={{ background: C.blueElectric, border: `2.5px solid ${C.surface1}` }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z" />
                 <circle cx="12" cy="13" r="4" />
               </svg>
@@ -4063,7 +4063,7 @@ function AuthScreen({ themeName, onToggleTheme }) {
         </button>
 
         <div className="flex flex-col items-center justify-center relative shrink-0" style={{ paddingTop: 4, paddingBottom: 16 }}>
-          <VaultHero size={215} tier={1} img={VAULT_IMG} ring={false} />
+          <VaultHero size={250} tier={1} img={VAULT_IMG} ring={false} />
           <h1 className="mt-1 font-bold text-center leading-tight" style={fs_(24, { color: C.text1 })}>
             {mode === "login" ? "Bem-vindo de volta" : "Crie sua conta"}
           </h1>
@@ -4507,7 +4507,7 @@ export default function App() {
         {authState.status === "loading" && (
           <Screen>
             <div className="flex-1 flex flex-col items-center justify-center">
-              <VaultHero size={160} tier={1} img={VAULT_IMG} ring={false} />
+              <VaultHero size={190} tier={1} img={VAULT_IMG} ring={false} />
             </div>
           </Screen>
         )}
