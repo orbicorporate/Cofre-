@@ -1855,7 +1855,11 @@ function HomeScreen({ vault, go, streak, level, themeName, onToggleTheme, onOpen
         const avgPerNumber = remaining / remainingCount;
         const daysAtN = Math.ceil(remainingCount / simPerDay);
         const yearsAtN = daysAtN / 365;
+        const monthsAtN = daysAtN / 30.44;
         const valueIn1Year = Math.min(remaining, Math.round(avgPerNumber * 365 * simPerDay));
+        const walletRows = WALLETS
+          .map((w) => ({ ...w, rate: WALLET_RATES[w.id] ?? 0, gain: projectGain(remaining, WALLET_RATES[w.id] ?? 0, monthsAtN) }))
+          .sort((a, b) => b.rate - a.rate);
         return (
           <Sheet onClose={() => setSimOpen(false)}>
             <h3 className="font-bold text-center px-4" style={fs_(17, { color: C.text1 })}>Simular ritmo</h3>
@@ -1889,6 +1893,39 @@ function HomeScreen({ vault, go, streak, level, themeName, onToggleTheme, onOpen
               </div>
               <Wallet size={22} color={C.blueElectric} />
             </div>
+
+            <p className="font-semibold mt-6 mb-2.5" style={fs_(12.5, { color: C.text3 })}>
+              Se render investido até {challenge.label} terminar ({fmtYears(yearsAtN)})
+            </p>
+            <div className="flex flex-col gap-2">
+              {walletRows.map((w) => {
+                const Icon = w.icon;
+                const isBest = w.id === BEST_WALLET_ID;
+                return (
+                  <div key={w.id} className="p-3 flex items-center gap-3" style={{ ...glass, borderRadius: 14 }}>
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: "rgba(20,41,63,0.055)" }}>
+                      <Icon size={15} color={C.text2} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium" style={fs_(12.5, { color: C.text1 })}>{w.label}</span>
+                        {isBest && <span className="px-1.5 py-0.5 rounded-full shrink-0" style={fs_(9, { color: C.gold, background: "rgba(232,169,61,0.14)" })}>Melhor rendimento</span>}
+                      </div>
+                      <p style={fs_(11, { color: w.gain > 0 ? C.green : C.text3 })}>
+                        {w.gain > 0 ? `+${fmtBRL(w.gain)} de juros` : "sem rendimento estimado"}
+                      </p>
+                    </div>
+                    <p className="font-semibold shrink-0" style={fs_(13, { color: w.gain > 0 ? C.green : C.text3 })}>
+                      {fmtBRL(remaining + w.gain)}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mt-3 leading-relaxed" style={fs_(10.5, { color: C.text3 })}>
+              Estimativa considerando os {fmtBRL(remaining)} que faltam guardados desde já e rendendo até o prazo simulado. Taxas aproximadas, não são garantia de rendimento.
+            </p>
+
             <div className="mt-4 flex items-center gap-2 px-1">
               <Shield size={13} color={C.danger} />
               <p style={fs_(11.5, { color: C.text3 })}>Vale pra qualquer ritmo: só marque depois de guardar.</p>
