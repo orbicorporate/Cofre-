@@ -357,6 +357,13 @@ function fmtInt(v) {
   return Math.round(v).toLocaleString("pt-BR");
 }
 
+function fmtYears(y) {
+  if (y >= 1) return `${y.toFixed(1)} anos`;
+  const months = y * 12;
+  if (months >= 1) return `${Math.round(months)} meses`;
+  return `${Math.max(1, Math.round(y * 365))} dias`;
+}
+
 /* =========================================================================
    VAULT VISUAL — real client artwork (cofre_principal_transparente) with a
    tier-tinted glow halo and an SVG progress ring wrapped around it
@@ -1346,6 +1353,8 @@ function HomeScreen({ vault, go, streak, level, themeName, onToggleTheme, onOpen
   const [notifOpen, setNotifOpen] = useState(false);
   const [hasUnreadNotif, setHasUnreadNotif] = useState(true);
   const [vaultSwitcherOpen, setVaultSwitcherOpen] = useState(false);
+  const [simOpen, setSimOpen] = useState(false);
+  const [simPerDay, setSimPerDay] = useState(2);
   const [editingVaultId, setEditingVaultId] = useState(null);
   const [editingLabel, setEditingLabel] = useState("");
   const [newVaultWarning, setNewVaultWarning] = useState(false);
@@ -1448,6 +1457,18 @@ function HomeScreen({ vault, go, streak, level, themeName, onToggleTheme, onOpen
           <p className="mt-4 text-center" style={fs_(12.5, { color: C.text2 })}>
             Faltam <span style={{ color: C.text1, fontWeight: 600 }}>{fmtBRL(remaining)}</span> para completar
           </p>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 p-3.5 mb-4" style={{ ...glass, borderRadius: 16 }}>
+          <div className="flex items-center gap-2 min-w-0">
+            <Flame size={15} color={C.amber} className="shrink-0" />
+            <p className="truncate" style={fs_(12, { color: C.text2 })}>
+              No ritmo de 1/dia, termina em <b style={{ color: C.text1 }}>{fmtYears(Math.max(1, challenge.n - protectedSet.size) / 365)}</b>
+            </p>
+          </div>
+          <button onClick={() => setSimOpen(true)} className="shrink-0 font-semibold" style={fs_(12, { color: C.blueElectric })}>
+            Simular
+          </button>
         </div>
 
         <button onClick={() => go("board")} className="w-full py-4 rounded-2xl font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform cofre-glow-pulse relative overflow-hidden cofre-shine-sweep" style={fs_(15, { ...ctaGradient, color: "#fff", boxShadow: "0 10px 26px -10px rgba(6,164,175,0.6)", "--glow-color": `${C.gold}66` })}>
@@ -1804,6 +1825,53 @@ function HomeScreen({ vault, go, streak, level, themeName, onToggleTheme, onOpen
                 </div>
               </div>
             )}
+          </Sheet>
+        );
+      })()}
+
+      {simOpen && (() => {
+        const remainingCount = Math.max(1, challenge.n - protectedSet.size);
+        const avgPerNumber = remaining / remainingCount;
+        const daysAtN = Math.ceil(remainingCount / simPerDay);
+        const yearsAtN = daysAtN / 365;
+        const valueIn1Year = Math.min(remaining, Math.round(avgPerNumber * 365 * simPerDay));
+        return (
+          <Sheet onClose={() => setSimOpen(false)}>
+            <h3 className="font-bold text-center px-4" style={fs_(17, { color: C.text1 })}>Simular ritmo</h3>
+            <p className="text-center mt-1 px-2" style={fs_(12.5, { color: C.text3 })}>
+              A partir de hoje, quanto tempo falta pra terminar {challenge.label} marcando mais de 1 número por dia
+            </p>
+            <div className="mt-6">
+              <div className="flex items-center justify-between mb-2.5">
+                <span style={fs_(12.5, { color: C.text3 })}>Números por dia</span>
+                <span className="font-bold" style={fs_(17, { color: C.green })}>{simPerDay}</span>
+              </div>
+              <input
+                type="range" min={1} max={20} value={simPerDay}
+                onChange={(e) => setSimPerDay(Number(e.target.value))}
+                className="w-full"
+                style={{ accentColor: C.green }}
+              />
+            </div>
+            <div className="mt-5 p-4 flex items-center justify-between" style={{ ...glassActive, borderRadius: 16, border: `1px solid ${C.green}55` }}>
+              <div>
+                <p style={fs_(11.5, { color: C.text3 })}>Termina em</p>
+                <p className="font-bold mt-1" style={fs_(20, { color: C.text1 })}>{fmtYears(yearsAtN)}</p>
+                <p className="mt-1" style={fs_(11.5, { color: C.text3 })}>{fmtInt(daysAtN)} dias marcando {simPerDay}/dia</p>
+              </div>
+              <TrendingUp size={26} color={C.green} />
+            </div>
+            <div className="mt-3 p-4 flex items-center justify-between" style={{ ...glass, borderRadius: 16 }}>
+              <div>
+                <p style={fs_(11.5, { color: C.text3 })}>Guardado em 1 ano nesse ritmo</p>
+                <p className="font-bold mt-1" style={fs_(18, { color: C.text1 })}>{fmtBRL(valueIn1Year)}</p>
+              </div>
+              <Wallet size={22} color={C.blueElectric} />
+            </div>
+            <div className="mt-4 flex items-center gap-2 px-1">
+              <Shield size={13} color={C.danger} />
+              <p style={fs_(11.5, { color: C.text3 })}>Vale pra qualquer ritmo: só marque depois de guardar.</p>
+            </div>
           </Sheet>
         );
       })()}
@@ -3751,13 +3819,6 @@ function OnboardingTour({ vault, onClose, onFinish }) {
   const yearsAt1 = daysAt1 / 365;
   const daysAtN = Math.ceil(n / perDay);
   const yearsAtN = daysAtN / 365;
-
-  const fmtYears = (y) => {
-    if (y >= 1) return `${y.toFixed(1)} anos`;
-    const months = y * 12;
-    if (months >= 1) return `${Math.round(months)} meses`;
-    return `${Math.max(1, Math.round(y * 365))} dias`;
-  };
 
   const valueByDays = (days) => Math.min(total, Math.round(avgPerNumber * days));
 
