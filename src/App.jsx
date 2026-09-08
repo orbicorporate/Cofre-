@@ -1343,7 +1343,7 @@ function useMultiVaultState(activeVaultId, allVaults) {
 /* =========================================================================
    SCREEN: HOME
    ========================================================================= */
-function HomeScreen({ vault, go, streak, level, themeName, onToggleTheme, onOpenTour, allVaults, ownedVaultIds, activeVaultId, onSelectVault, onRenameVault, onDeleteVault, avatarUrl }) {
+function HomeScreen({ vault, go, streak, level, themeName, onToggleTheme, onOpenTour, allVaults, ownedVaultIds, activeVaultId, onSelectVault, onRenameVault, onDeleteVault, avatarUrl, mimoStatus, protectedToday }) {
   const { challenge, protectedTotal, progressPct, protectedSet } = vault;
   const remaining = Math.max(0, challenge.total - protectedTotal);
   const nextMilestone = MILESTONES.find((m) => m > progressPct) ?? null;
@@ -1367,11 +1367,25 @@ function HomeScreen({ vault, go, streak, level, themeName, onToggleTheme, onOpen
   const [deleteMigrateTarget, setDeleteMigrateTarget] = useState(null);
   const closeDeleteFlow = () => { setDeleteFlow(null); setDeleteMigrateTarget(null); };
 
+  const achievementCtx = { protectedCount: protectedSet?.size ?? 0, protectedTotal, progressPct, streak };
+  const unlockedCount = evaluateAchievements(achievementCtx).filter((b) => b.unlocked).length;
+  const milestonesReached = MILESTONES.filter((m) => m <= progressPct);
+  const hasUnclaimedMimo = milestonesReached.some((m) => !mimoStatus?.[m]);
+
   const notifications = [
-    { icon: Gift, color: C.gold, title: "Novo mimo disponível", sub: "Você desbloqueou um marco de jornada", time: "há 2h" },
-    { icon: Flame, color: C.amber, title: "Sequência em risco", sub: "Proteja um número hoje pra manter sua sequência", time: "há 5h" },
-    { icon: Trophy, color: C.blueElectric, title: "Conquista desbloqueada", sub: "Você chegou a um novo marco do Cofre", time: "ontem" },
-  ];
+    hasUnclaimedMimo && {
+      icon: Gift, color: C.gold, title: "Novo mimo disponível",
+      sub: "Você tem um marco pronto pra resgatar", onClick: () => { setNotifOpen(false); go("journey"); },
+    },
+    streak > 0 && protectedToday === 0 && {
+      icon: Flame, color: C.amber, title: "Sequência em risco",
+      sub: `Proteja um número hoje pra manter seus ${streak} dias`, onClick: () => { setNotifOpen(false); go("board"); },
+    },
+    unlockedCount > 0 && {
+      icon: Trophy, color: C.blueElectric, title: `${unlockedCount} conquista${unlockedCount > 1 ? "s" : ""} desbloqueada${unlockedCount > 1 ? "s" : ""}`,
+      sub: "Toque pra ver todas as suas badges", onClick: () => { setNotifOpen(false); go("achievements"); },
+    },
+  ].filter(Boolean);
 
   const quick = [
     { id: "match", label: "Cofre Match™", sub: "Guarde vários números de uma vez", icon: Shuffle, color: C.blueElectric, payload: null },
@@ -1408,7 +1422,7 @@ function HomeScreen({ vault, go, streak, level, themeName, onToggleTheme, onOpen
           </button>
           <button onClick={() => { setNotifOpen(true); setHasUnreadNotif(false); }} className="w-9 h-9 rounded-full flex items-center justify-center relative" style={glass}>
             <Bell size={16} color={C.text1} />
-            {hasUnreadNotif && <span className="absolute rounded-full" style={{ top: 6, right: 8, width: 6, height: 6, background: C.danger }} />}
+            {hasUnreadNotif && notifications.length > 0 && <span className="absolute rounded-full" style={{ top: 6, right: 8, width: 6, height: 6, background: C.danger }} />}
           </button>
           <button onClick={() => go("profile")} className="w-9 h-9 rounded-full overflow-hidden shrink-0" style={{ border: `1px solid ${C.strokeSoft}` }}>
             {avatarUrl ? (
@@ -1548,23 +1562,30 @@ function HomeScreen({ vault, go, streak, level, themeName, onToggleTheme, onOpen
       {notifOpen && (
         <Sheet onClose={() => setNotifOpen(false)}>
           <h3 className="font-bold text-center mb-4" style={fs_(17, { color: C.text1 })}>Notificações</h3>
-          <div className="flex flex-col gap-2">
-            {notifications.map((n, i) => {
-              const Icon = n.icon;
-              return (
-                <div key={i} className="p-3 flex items-start gap-3" style={{ ...glass, borderRadius: 14 }}>
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: `${n.color}1f` }}>
-                    <Icon size={16} color={n.color} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold" style={fs_(13, { color: C.text1 })}>{n.title}</p>
-                    <p className="mt-0.5 leading-snug" style={fs_(11.5, { color: C.text3 })}>{n.sub}</p>
-                    <p className="mt-1" style={fs_(10, { color: C.text3 })}>{n.time}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          {notifications.length === 0 ? (
+            <div className="py-8 flex flex-col items-center text-center">
+              <Bell size={22} color={C.text3} className="mb-2" />
+              <p style={fs_(12.5, { color: C.text3 })}>Nada novo por aqui ainda.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {notifications.map((n, i) => {
+                const Icon = n.icon;
+                return (
+                  <button key={i} onClick={n.onClick} className="p-3 flex items-start gap-3 text-left active:scale-95 transition-transform" style={{ ...glass, borderRadius: 14 }}>
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: `${n.color}1f` }}>
+                      <Icon size={16} color={n.color} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold" style={fs_(13, { color: C.text1 })}>{n.title}</p>
+                      <p className="mt-0.5 leading-snug" style={fs_(11.5, { color: C.text3 })}>{n.sub}</p>
+                    </div>
+                    <ChevronRight size={15} color={C.text3} className="shrink-0 mt-1" />
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </Sheet>
       )}
 
@@ -2169,7 +2190,7 @@ function NumberFlow({ number, status, onClose, onProtected, streak = 0 }) {
           <ConfirmDepositSheet
             amount={number}
             onClose={() => setConfirmSheet(false)}
-            onConfirm={() => { setConfirmSheet(false); onProtected(number); setStep("success"); }}
+            onConfirm={() => { setConfirmSheet(false); onProtected(number, wallet); setStep("success"); }}
           />
         )}
       </>
@@ -2892,7 +2913,7 @@ function MatchScreen({ vault, go, onVisit, onProtected }) {
 
   const confirm = () => {
     if (!result || !wallet) return;
-    result.combo.forEach((n) => onProtected(n));
+    result.combo.forEach((n) => onProtected(n, wallet));
     setConfirmed(true);
     setShowSheet(false);
   };
@@ -3052,7 +3073,7 @@ function RouletteScreen({ vault, go, onProtected }) {
 
   const confirmProtect = () => {
     if (landed == null || !wallet) return;
-    onProtected(landed);
+    onProtected(landed, wallet);
     setProtectedNow(true);
     setShowSheet(false);
   };
@@ -3322,14 +3343,13 @@ const WALLET_ROWS_META = [
   { id: "cdb", l: "CDB", c: C.blueElectric, icon: Landmark },
   { id: "tesouro", l: "Tesouro Selic", c: C.cyan, icon: Building2 },
   { id: "poupanca", l: "Poupança", c: C.text3, icon: PiggyBank },
+  { id: "rf", l: "Fundo de renda fixa", c: C.green, icon: LineChart },
   { id: "reserva", l: "Conta de reserva", c: C.violet, icon: Wallet },
   { id: "casa", l: "Dinheiro em casa", c: C.gold, icon: Banknote },
+  { id: "outro", l: "Outro", c: C.text2, icon: PocketKnife },
 ];
 
-function WalletsScreen({ go }) {
-  // Zero balances by default — a fresh Cofre means nothing has been
-  // distributed to an outside wallet yet either.
-  const [balances, setBalances] = useState({ cdb: 0, tesouro: 0, poupanca: 0, reserva: 0, casa: 0 });
+function WalletsScreen({ go, balances, onMoveMoney }) {
   const [moveFrom, setMoveFrom] = useState(null); // wallet id being moved out of
   const [moveTo, setMoveTo] = useState(null);
   const [amount, setAmount] = useState("");
@@ -3344,7 +3364,7 @@ function WalletsScreen({ go }) {
   const confirmMove = () => {
     const n = Math.round(Number(amount));
     if (!moveFrom || !moveTo || moveFrom === moveTo || !n || n <= 0 || n > balances[moveFrom]) return;
-    setBalances((prev) => ({ ...prev, [moveFrom]: prev[moveFrom] - n, [moveTo]: prev[moveTo] + n }));
+    onMoveMoney(moveFrom, moveTo, n);
     closeMove();
   };
 
@@ -4236,6 +4256,7 @@ export default function App() {
     setLevel(1);
     setProtectedToday(0);
     setVisitedMatch(false);
+    setWalletBalances({ poupanca: 0, cdb: 0, tesouro: 0, rf: 0, reserva: 0, casa: 0, outro: 0 });
     writeLocal(LS_ONBOARDED_KEY, null);
     writeLocal(LS_AVATAR_KEY, null);
   }, []);
@@ -4271,6 +4292,7 @@ export default function App() {
   const [streak, setStreak] = useState(0);
   const [level, setLevel] = useState(1);
   const [protectedToday, setProtectedToday] = useState(0);
+  const [walletBalances, setWalletBalances] = useState({ poupanca: 0, cdb: 0, tesouro: 0, rf: 0, reserva: 0, casa: 0, outro: 0 });
   const [visitedMatch, setVisitedMatch] = useState(false);
 
   const allVaults = useMemo(
@@ -4305,6 +4327,7 @@ export default function App() {
         if (c.avatarUrl) setAvatarUrl(c.avatarUrl);
         if (typeof c.streak === "number") setStreak(c.streak);
         if (typeof c.level === "number") setLevel(c.level);
+        if (c.walletBalances) setWalletBalances((prev) => ({ ...prev, ...c.walletBalances }));
         if (c.vaultStore) setPendingVaultStore(c.vaultStore);
         writeLocal(LS_ONBOARDED_KEY, "1");
         setScreen((s) => (s === "welcome" ? "home" : s));
@@ -4335,7 +4358,7 @@ export default function App() {
     saveTimerRef.current = setTimeout(() => {
       const payload = {
         ownedVaultIds, activeVaultId, customVaults, vaultLabelOverrides,
-        themeName, avatarUrl, streak, level,
+        themeName, avatarUrl, streak, level, walletBalances,
         vaultStore: vault.serializeStore(),
       };
       supabase
@@ -4345,7 +4368,7 @@ export default function App() {
     }, 1000);
     return () => clearTimeout(saveTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authState.status, ownedVaultIds, activeVaultId, customVaults, vaultLabelOverrides, themeName, avatarUrl, streak, level, vault.protectedTotal]);
+  }, [authState.status, ownedVaultIds, activeVaultId, customVaults, vaultLabelOverrides, themeName, avatarUrl, streak, level, walletBalances, vault.protectedTotal]);
 
   const go = useCallback((next, payload) => {
     if (next === "stub") setStubLabel(payload?.label || "");
@@ -4361,7 +4384,14 @@ export default function App() {
   const openNumber = (n, status) => setNumberSheet({ number: n, status });
   const closeNumber = () => setNumberSheet(null);
   const [coinBurstId, setCoinBurstId] = useState(0);
-  const handleProtected = (n) => { vault.protectNumber(n); setCoinBurstId((k) => k + 1); setProtectedToday((k) => k + 1); };
+  const handleProtected = (n, walletKey) => {
+    vault.protectNumber(n);
+    setCoinBurstId((k) => k + 1);
+    setProtectedToday((k) => k + 1);
+    if (walletKey) {
+      setWalletBalances((prev) => ({ ...prev, [walletKey]: (prev[walletKey] || 0) + n }));
+    }
+  };
   const [tourOpen, setTourOpen] = useState(false);
   const tourShownRef = useRef(false);
   const [lightBurstId, setLightBurstId] = useState(0);
@@ -4402,6 +4432,7 @@ export default function App() {
     setMimoStatus({});
     setProtectedToday(0);
     setVisitedMatch(false);
+    setWalletBalances({ poupanca: 0, cdb: 0, tesouro: 0, rf: 0, reserva: 0, casa: 0, outro: 0 });
     go("profile");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vault, go]);
@@ -4588,14 +4619,20 @@ export default function App() {
             onCreateNew={() => go("createVault")}
           />
         )}
-        {screen === "home" && <HomeScreen vault={vault} go={go} streak={streak} level={level} themeName={themeName} onToggleTheme={toggleTheme} onOpenTour={() => setTourOpen(true)} allVaults={allVaults} ownedVaultIds={ownedVaultIds} activeVaultId={activeVaultId} onSelectVault={setActiveVaultId} onRenameVault={(id, label) => setVaultLabelOverrides((prev) => ({ ...prev, [id]: label }))} onDeleteVault={handleDeleteVault} avatarUrl={avatarUrl} />}
+        {screen === "home" && <HomeScreen vault={vault} go={go} streak={streak} level={level} themeName={themeName} onToggleTheme={toggleTheme} onOpenTour={() => setTourOpen(true)} allVaults={allVaults} ownedVaultIds={ownedVaultIds} activeVaultId={activeVaultId} onSelectVault={setActiveVaultId} onRenameVault={(id, label) => setVaultLabelOverrides((prev) => ({ ...prev, [id]: label }))} onDeleteVault={handleDeleteVault} avatarUrl={avatarUrl} mimoStatus={mimoStatus} protectedToday={protectedToday} />}
         {screen === "board" && <BoardScreen vault={vault} go={go} openNumber={openNumber} />}
         {screen === "journey" && <JourneyScreen vault={vault} go={go} mimoStatus={mimoStatus} setMimoStatus={setMimoStatus} />}
         {screen === "achievements" && <AchievementsScreen go={go} level={level} vault={vault} streak={streak} />}
         {screen === "wealth" && <WealthScreen vault={vault} go={go} />}
         {screen === "mystery" && <MysteryBoxScreen vault={vault} go={go} />}
         {screen === "withdraw" && <WithdrawScreen vault={vault} go={go} />}
-        {screen === "wallets" && <WalletsScreen go={go} />}
+        {screen === "wallets" && (
+          <WalletsScreen
+            go={go}
+            balances={walletBalances}
+            onMoveMoney={(from, to, n) => setWalletBalances((prev) => ({ ...prev, [from]: prev[from] - n, [to]: prev[to] + n }))}
+          />
+        )}
         {screen === "myVaults" && (
           <MyVaultsScreen
             go={go}
